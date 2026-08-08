@@ -23,6 +23,9 @@ store-sdk = { workspace = true }
 tokio = { version = "1", features = ["time"] }
 webbrowser = "1"
 
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+notify-rust = "4"
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-timers = { version = "0.3", features = ["futures"] }
 

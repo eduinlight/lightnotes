@@ -1,5 +1,5 @@
 pub use config::StoreConfig;
-pub use local_store::LocalSnapshot;
+pub use local_store::{LocalSnapshot, ReminderSchedule};
 pub use use_store::{use_synced_store, StoreHandle};
 
 mod config;

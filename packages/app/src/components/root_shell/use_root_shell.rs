@@ -1,10 +1,12 @@
 use crate::boot::DISMISS_SPLASH_JS;
-use crate::state::{use_app_i18n, use_persisted_session, use_synced_notes, AuthState, AuthStatus, BootState};
+use crate::state::{date_math, use_app_i18n, use_persisted_session, use_reminders, use_synced_notes, AuthState, AuthStatus, BootState};
 use crate::Route;
 use dioxus::prelude::*;
 use ui::components::sidebar::use_viewport_resolved;
 
 const SPLASH_TIMEOUT_MS: u32 = 2500;
+
+const TIMEZONE_OFFSET_JS: &str = "dioxus.send(new Date().getTimezoneOffset());";
 
 #[derive(Clone, Copy)]
 pub struct RootShellState {
@@ -14,9 +16,11 @@ pub struct RootShellState {
 pub fn use_root_shell() -> RootShellState {
   let boot = use_context_provider(BootState::seed);
   let auth = use_context_provider(AuthState::empty);
+  use_local_timezone_offset();
   let store = use_synced_notes();
   use_persisted_session(auth);
   use_app_i18n(store);
+  use_reminders(store);
 
   let resolved = use_viewport_resolved();
   let mut viewport_ready = boot.viewport_ready;
@@ -95,4 +99,15 @@ pub fn use_root_shell() -> RootShellState {
   RootShellState {
     gated: auth.status() != AuthStatus::SignedIn && !on_login,
   }
+}
+
+fn use_local_timezone_offset() {
+  use_hook(move || {
+    spawn(async move {
+      let mut eval = document::eval(TIMEZONE_OFFSET_JS);
+      if let Ok(minutes) = eval.recv::<i64>().await {
+        date_math::set_local_offset_ms(date_math::offset_ms_from_timezone_offset_minutes(minutes));
+      }
+    });
+  });
 }

@@ -1,11 +1,13 @@
 use super::use_settings_panel::use_settings_panel;
 use super::SettingsSession;
 use crate::components::{LanguagePicker, SettingsSkeleton};
+use crate::state::scheduler::Permission;
 use crate::state::{SyncStatus, Theme, ACCENT_SWATCHES};
 use dioxus::prelude::*;
 use dioxus_i18n::t;
-use dioxus_icons::lucide::{Check, CloudCheck, CloudOff, HardDrive, Moon, Notebook, Sun, UserRound};
+use dioxus_icons::lucide::{Bell, BellOff, Check, CloudCheck, CloudOff, HardDrive, Moon, Notebook, Sun, UserRound};
 use ui::components::button::{Button, ButtonSize, ButtonVariant};
+use ui::components::switch::Switch;
 
 fn theme_card_class(active: bool) -> &'static str {
   if active {
@@ -35,6 +37,18 @@ pub fn SettingsPanel() -> Element {
   let sync_label = match sync {
     SyncStatus::Synced => t!("sync-saved"),
     SyncStatus::Offline => t!("sync-offline"),
+  };
+
+  let reminders_enabled = store.reminders_enabled();
+  let titles_visible = store.reminder_titles_visible();
+  let scheduler = (settings.scheduler)();
+  let background_delivery = scheduler.background;
+  let permission = scheduler.permission;
+  let permission_label = match permission {
+    Permission::Granted => t!("settings-reminders-permission-granted"),
+    Permission::Denied => t!("settings-reminders-permission-denied"),
+    Permission::Unsupported => t!("settings-reminders-permission-unsupported"),
+    Permission::Unknown => t!("settings-reminders-permission-unknown"),
   };
 
   let signed_in = settings.auth.is_signed_in();
@@ -113,6 +127,54 @@ pub fn SettingsPanel() -> Element {
                       div { class: "text-xs text-[var(--secondary-color-5)]", {t!("settings-language-description")} }
                   }
                   LanguagePicker {}
+              }
+          }
+          SettingsSession { title: t!("settings-reminders"),
+              div { class: "flex items-center gap-3 rounded-lg bg-[var(--primary-color-3)] p-3",
+                  if reminders_enabled {
+                      Bell { size: "20px", stroke: "var(--accent)" }
+                  } else {
+                      BellOff { size: "20px", stroke: "var(--secondary-color-5)" }
+                  }
+                  div { class: "flex-1",
+                      div { class: "text-sm font-medium text-[var(--secondary-color)]", {t!("settings-reminders-enabled")} }
+                      div { class: "text-xs text-[var(--secondary-color-5)]",
+                          if background_delivery {
+                              {t!("settings-reminders-background-active")}
+                          } else {
+                              {t!("settings-reminders-background-unavailable")}
+                          }
+                      }
+                  }
+                  Switch {
+                      checked: reminders_enabled,
+                      on_checked_change: move |value| settings.set_reminders_enabled(value),
+                  }
+              }
+              div { class: "mt-2 flex items-center gap-3 rounded-lg bg-[var(--primary-color-3)] p-3",
+                  div { class: "flex-1",
+                      div { class: "text-sm font-medium text-[var(--secondary-color)]", {t!("settings-reminders-titles")} }
+                      div { class: "text-xs text-[var(--secondary-color-5)]", {t!("settings-reminders-titles-description")} }
+                  }
+                  Switch {
+                      checked: titles_visible,
+                      on_checked_change: move |value| settings.set_reminder_titles_visible(value),
+                  }
+              }
+              div { class: "mt-2 flex items-center gap-3 rounded-lg bg-[var(--primary-color-3)] p-3",
+                  div { class: "flex-1",
+                      div { class: "text-sm font-medium text-[var(--secondary-color)]", {t!("settings-reminders-permission")} }
+                      div { class: "text-xs text-[var(--secondary-color-5)]", "{permission_label}" }
+                  }
+                  if permission != Permission::Granted && permission != Permission::Unsupported {
+                      Button {
+                          variant: ButtonVariant::Secondary,
+                          size: ButtonSize::Sm,
+                          class: "border border-[var(--primary-color-6)] bg-transparent hover:bg-[color-mix(in_srgb,var(--secondary-color)_5%,transparent)]",
+                          onclick: move |_| settings.request_notification_permission(),
+                          {t!("settings-reminders-permission-request")}
+                      }
+                  }
               }
           }
           SettingsSession { title: t!("settings-sync"),

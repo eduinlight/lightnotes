@@ -1,4 +1,4 @@
-use crate::state::{date_math, i18n, now_ms, use_diary_ui, use_notes, CalendarViewMode, DiaryUiState, Note, NotesStore};
+use crate::state::{date_math, i18n, local_now_ms, use_diary_ui, use_notes, CalendarViewMode, DiaryUiState, Note, NotesStore};
 use dioxus::prelude::*;
 use ui::components::sidebar::use_is_mobile;
 
@@ -87,7 +87,7 @@ impl DiaryCalendarState {
     let month_start_days = date_math::days_from_civil(year, month, 1);
     let lead = date_math::weekday_index(month_start_days) as i64;
     let grid_start_days = month_start_days - lead;
-    let today_days = date_math::day_key(now_ms());
+    let today_days = date_math::day_key(local_now_ms());
     let cursor_days = date_math::day_key(self.cursor_date_ms());
     let notes = self.filtered_notes();
 
@@ -104,7 +104,7 @@ impl DiaryCalendarState {
   pub fn week_cells(&self) -> Vec<DayCell> {
     let cursor_days = date_math::day_key(self.cursor_date_ms());
     let week_start_days = cursor_days - date_math::weekday_index(cursor_days) as i64;
-    let today_days = date_math::day_key(now_ms());
+    let today_days = date_math::day_key(local_now_ms());
     let notes = self.filtered_notes();
 
     (0..7).map(|offset| self.day_cell(week_start_days + offset, true, &notes, today_days, cursor_days)).collect()

@@ -10,7 +10,7 @@ use tokio::sync::OnceCell;
 
 use crate::config::StoreConfig;
 use crate::db_key;
-use crate::local_store::{ApplyOutcome, LocalSnapshot, LocalStore};
+use crate::local_store::{ApplyOutcome, LocalSnapshot, LocalStore, ReminderSchedule};
 use crate::processor;
 use sync_dto::QueuedChange;
 
@@ -112,6 +112,38 @@ impl StoreHandle {
     };
 
     store.clear_session().await
+  }
+
+  pub async fn load_reminder_schedules(&self, user_id: &str) -> Vec<ReminderSchedule> {
+    let Some(store) = self.store().await else {
+      return Vec::new();
+    };
+
+    store.load_reminder_schedules(user_id).await
+  }
+
+  pub async fn upsert_reminder_schedule(&self, user_id: &str, schedule: &ReminderSchedule) {
+    let Some(store) = self.store().await else {
+      return;
+    };
+
+    store.upsert_reminder_schedule(user_id, schedule).await
+  }
+
+  pub async fn delete_reminder_schedule(&self, user_id: &str, note_id: &str) {
+    let Some(store) = self.store().await else {
+      return;
+    };
+
+    store.delete_reminder_schedule(user_id, note_id).await
+  }
+
+  pub async fn clear_reminder_schedules(&self, user_id: &str) {
+    let Some(store) = self.store().await else {
+      return;
+    };
+
+    store.clear_reminder_schedules(user_id).await
   }
 
   pub async fn clear_user_data(&self, user_id: &str) {

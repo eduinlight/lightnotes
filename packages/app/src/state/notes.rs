@@ -21,7 +21,7 @@ pub struct Note {
   pub starred: bool,
   pub updated_at_ms: i64,
   pub order: i64,
-  #[serde(default = "now_ms")]
+  #[serde(default = "local_now_ms")]
   pub date_ms: i64,
   #[serde(default)]
   pub remind_before_hours: Option<i64>,
@@ -32,6 +32,10 @@ pub fn now_ms() -> i64 {
     .duration_since(web_time::UNIX_EPOCH)
     .map(|duration| duration.as_millis() as i64)
     .unwrap_or(0)
+}
+
+pub fn local_now_ms() -> i64 {
+  super::date_math::utc_ms_to_local_ms(now_ms())
 }
 
 pub fn format_relative_time(updated_at_ms: i64) -> String {
@@ -145,12 +149,24 @@ pub struct PersistedState {
   pub accent: String,
   #[serde(default)]
   pub language: Language,
+  #[serde(default = "default_reminders_enabled")]
+  pub reminders_enabled: bool,
+  #[serde(default = "default_reminder_titles_visible")]
+  pub reminder_titles_visible: bool,
   pub sync: SyncStatus,
   pub next_id: u32,
 }
 
 fn default_accent() -> String {
   ACCENT_SWATCHES[0].to_string()
+}
+
+pub fn default_reminders_enabled() -> bool {
+  true
+}
+
+pub fn default_reminder_titles_visible() -> bool {
+  true
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -164,6 +180,8 @@ pub struct NotesStore {
   theme: Signal<Theme>,
   accent: Signal<String>,
   language: Signal<Language>,
+  reminders_enabled: Signal<bool>,
+  reminder_titles_visible: Signal<bool>,
   sync: Signal<SyncStatus>,
   next_id: Signal<u32>,
 }
@@ -180,6 +198,8 @@ impl NotesStore {
       theme: Signal::new(Theme::Dark),
       accent: Signal::new(ACCENT_SWATCHES[0].to_string()),
       language: Signal::new(Language::default()),
+      reminders_enabled: Signal::new(default_reminders_enabled()),
+      reminder_titles_visible: Signal::new(default_reminder_titles_visible()),
       sync: Signal::new(SyncStatus::Synced),
       next_id: Signal::new(1),
     }
@@ -187,6 +207,17 @@ impl NotesStore {
 
   pub fn user_id(&self) -> String {
     (self.user_id)()
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  pub fn peek_user_id(&self) -> String {
+    self.user_id.peek().clone()
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  pub fn peek_notes(&self) -> Vec<Note> {
+    let user_id = self.peek_user_id();
+    self.notes.peek().iter().filter(|note| note.user_id == user_id).cloned().collect()
   }
 
   pub fn set_user(&mut self, user_id: String) {
@@ -266,6 +297,19 @@ impl NotesStore {
 
   pub fn language(&self) -> Language {
     (self.language)()
+  }
+
+  pub fn reminders_enabled(&self) -> bool {
+    (self.reminders_enabled)()
+  }
+
+  pub fn reminder_titles_visible(&self) -> bool {
+    (self.reminder_titles_visible)()
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  pub fn peek_reminders_enabled(&self) -> bool {
+    *self.reminders_enabled.peek()
   }
 
   pub fn sync(&self) -> SyncStatus {
@@ -354,6 +398,14 @@ impl NotesStore {
     self.language.set(language);
   }
 
+  pub fn set_reminders_enabled(&mut self, enabled: bool) {
+    self.reminders_enabled.set(enabled);
+  }
+
+  pub fn set_reminder_titles_visible(&mut self, visible: bool) {
+    self.reminder_titles_visible.set(visible);
+  }
+
   pub fn toggle_sync(&mut self) {
     let next = match self.sync() {
       SyncStatus::Synced => SyncStatus::Offline,
@@ -408,7 +460,7 @@ impl NotesStore {
       _ => Vec::new(),
     };
 
-    self.insert_note(folder_id, tag_ids, now_ms())
+    self.insert_note(folder_id, tag_ids, local_now_ms())
   }
 
   pub fn create_diary_note(&mut self, date_ms: i64, folder_id: Option<String>, tag_ids: Vec<String>) -> String {
@@ -561,6 +613,8 @@ impl NotesStore {
       theme: self.theme(),
       accent: self.accent(),
       language: self.language(),
+      reminders_enabled: self.reminders_enabled(),
+      reminder_titles_visible: self.reminder_titles_visible(),
       sync: self.sync(),
       next_id: (self.next_id)(),
     }
@@ -573,6 +627,8 @@ impl NotesStore {
     self.theme.set(state.theme);
     self.accent.set(state.accent);
     self.language.set(state.language);
+    self.reminders_enabled.set(state.reminders_enabled);
+    self.reminder_titles_visible.set(state.reminder_titles_visible);
     self.sync.set(state.sync);
     self.next_id.set(state.next_id);
   }
