@@ -29,6 +29,17 @@ pub fn use_app_i18n(store: NotesStore) {
   });
 }
 
+pub fn format_absolute(ms: i64) -> String {
+  let (_, month, day, hour24, minute) = super::date_math::date_ms_to_ymdhm(ms);
+  let period = if hour24 < 12 { t!("time-am") } else { t!("time-pm") };
+  let hour12 = match hour24 % 12 {
+    0 => 12,
+    hour => hour,
+  };
+
+  format!("{day} {} \u{b7} {hour12}:{minute:02} {period}", month_short_name(month))
+}
+
 pub fn month_name(month: u32) -> String {
   match month {
     1 => t!("month-1"),

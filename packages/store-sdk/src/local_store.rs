@@ -25,6 +25,14 @@ pub struct LocalSnapshot {
   pub tags: Vec<TagDto>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReminderSchedule {
+  pub note_id: String,
+  pub fire_at_ms: i64,
+  pub payload_hash: String,
+  pub scheduled_at_ms: i64,
+}
+
 impl LocalStore {
   pub async fn try_connect(db_path: &Path, key: &DbKey) -> Option<Self> {
     if let Some(parent) = db_path.parent() {
@@ -187,6 +195,10 @@ impl LocalStore {
       .execute(&self.pool)
       .await
       .expect("failed to delete entity");
+
+    if entity == EntityKind::Note {
+      self.delete_reminder_schedule(user_id, entity_id).await;
+    }
   }
 
   async fn upsert_payload(&self, user_id: &str, payload: Option<&ChangePayload>) {
@@ -356,6 +368,57 @@ impl LocalStore {
       .expect("failed to clear session");
   }
 
+  pub async fn load_reminder_schedules(&self, user_id: &str) -> Vec<ReminderSchedule> {
+    sqlx::query(
+      "SELECT note_id, fire_at_ms, payload_hash, scheduled_at_ms FROM reminder_schedules WHERE user_id = ? ORDER BY fire_at_ms ASC",
+    )
+    .bind(user_id)
+    .fetch_all(&self.pool)
+    .await
+    .expect("failed to load reminder schedules")
+    .into_iter()
+    .map(|row| ReminderSchedule {
+      note_id: row.get("note_id"),
+      fire_at_ms: row.get("fire_at_ms"),
+      payload_hash: row.get("payload_hash"),
+      scheduled_at_ms: row.get("scheduled_at_ms"),
+    })
+    .collect()
+  }
+
+  pub async fn upsert_reminder_schedule(&self, user_id: &str, schedule: &ReminderSchedule) {
+    sqlx::query(
+      "INSERT INTO reminder_schedules (user_id, note_id, fire_at_ms, payload_hash, scheduled_at_ms) VALUES (?, ?, ?, ?, ?) \
+       ON CONFLICT(user_id, note_id) DO UPDATE SET fire_at_ms = excluded.fire_at_ms, payload_hash = excluded.payload_hash, \
+       scheduled_at_ms = excluded.scheduled_at_ms",
+    )
+    .bind(user_id)
+    .bind(&schedule.note_id)
+    .bind(schedule.fire_at_ms)
+    .bind(&schedule.payload_hash)
+    .bind(schedule.scheduled_at_ms)
+    .execute(&self.pool)
+    .await
+    .expect("failed to upsert reminder schedule");
+  }
+
+  pub async fn delete_reminder_schedule(&self, user_id: &str, note_id: &str) {
+    sqlx::query("DELETE FROM reminder_schedules WHERE user_id = ? AND note_id = ?")
+      .bind(user_id)
+      .bind(note_id)
+      .execute(&self.pool)
+      .await
+      .expect("failed to delete reminder schedule");
+  }
+
+  pub async fn clear_reminder_schedules(&self, user_id: &str) {
+    sqlx::query("DELETE FROM reminder_schedules WHERE user_id = ?")
+      .bind(user_id)
+      .execute(&self.pool)
+      .await
+      .expect("failed to clear reminder schedules");
+  }
+
   pub async fn clear_user_data(&self, user_id: &str) {
     for statement in [
       "DELETE FROM notes WHERE user_id = ?",
@@ -364,6 +427,7 @@ impl LocalStore {
       "DELETE FROM outbound_queue WHERE user_id = ?",
       "DELETE FROM applied_changes WHERE user_id = ?",
       "DELETE FROM sync_cursor WHERE user_id = ?",
+      "DELETE FROM reminder_schedules WHERE user_id = ?",
     ] {
       sqlx::query(statement)
         .bind(user_id)
@@ -409,6 +473,87 @@ mod tests {
       client_updated_at_ms: updated_at_ms,
       enqueued_at_ms: updated_at_ms,
     }
+  }
+
+  fn schedule(note_id: &str, fire_at_ms: i64, payload_hash: &str) -> ReminderSchedule {
+    ReminderSchedule {
+      note_id: note_id.into(),
+      fire_at_ms,
+      payload_hash: payload_hash.into(),
+      scheduled_at_ms: 1_000,
+    }
+  }
+
+  #[tokio::test]
+  async fn reminder_schedules_survive_reopening_the_database() {
+    let dir = std::env::temp_dir().join(format!("lightnotes-test-{}", uuid::Uuid::new_v4()));
+    let db_path = dir.join("lightnotes.db");
+
+    let store = LocalStore::try_connect(&db_path, &TEST_KEY).await.expect("first connect");
+    store.upsert_reminder_schedule("user-1", &schedule("note-1", 5_000, "hash-a")).await;
+    drop(store);
+
+    let reopened = LocalStore::try_connect(&db_path, &TEST_KEY).await.expect("second connect");
+
+    assert_eq!(reopened.load_reminder_schedules("user-1").await, vec![schedule("note-1", 5_000, "hash-a")]);
+
+    std::fs::remove_dir_all(&dir).ok();
+  }
+
+  #[tokio::test]
+  async fn upserting_a_reminder_schedule_replaces_the_previous_row() {
+    let dir = std::env::temp_dir().join(format!("lightnotes-test-{}", uuid::Uuid::new_v4()));
+    let db_path = dir.join("lightnotes.db");
+
+    let store = LocalStore::try_connect(&db_path, &TEST_KEY).await.expect("connect");
+    store.upsert_reminder_schedule("user-1", &schedule("note-1", 5_000, "hash-a")).await;
+    store.upsert_reminder_schedule("user-1", &schedule("note-1", 9_000, "hash-b")).await;
+
+    let stored = store.load_reminder_schedules("user-1").await;
+
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].fire_at_ms, 9_000);
+    assert_eq!(stored[0].payload_hash, "hash-b");
+
+    std::fs::remove_dir_all(&dir).ok();
+  }
+
+  #[tokio::test]
+  async fn reminder_schedules_are_scoped_per_user() {
+    let dir = std::env::temp_dir().join(format!("lightnotes-test-{}", uuid::Uuid::new_v4()));
+    let db_path = dir.join("lightnotes.db");
+
+    let store = LocalStore::try_connect(&db_path, &TEST_KEY).await.expect("connect");
+    store.upsert_reminder_schedule("user-a", &schedule("note-1", 5_000, "hash-a")).await;
+    store.upsert_reminder_schedule("user-b", &schedule("note-1", 7_000, "hash-b")).await;
+
+    store.clear_reminder_schedules("user-a").await;
+
+    assert!(store.load_reminder_schedules("user-a").await.is_empty());
+    assert_eq!(store.load_reminder_schedules("user-b").await.len(), 1);
+
+    std::fs::remove_dir_all(&dir).ok();
+  }
+
+  #[tokio::test]
+  async fn deleting_a_note_drops_its_reminder_schedule() {
+    let dir = std::env::temp_dir().join(format!("lightnotes-test-{}", uuid::Uuid::new_v4()));
+    let db_path = dir.join("lightnotes.db");
+
+    let store = LocalStore::try_connect(&db_path, &TEST_KEY).await.expect("connect");
+    store.apply("user-1", &note_change("note-1", "doomed", 1_000)).await;
+    store.upsert_reminder_schedule("user-1", &schedule("note-1", 5_000, "hash-a")).await;
+
+    let mut deletion = note_change("note-1", "doomed", 2_000);
+    deletion.change_id = "change-note-1-delete".into();
+    deletion.op = ChangeOp::Delete;
+    deletion.payload = None;
+    store.apply("user-1", &deletion).await;
+
+    assert!(store.load_snapshot("user-1").await.notes.is_empty());
+    assert!(store.load_reminder_schedules("user-1").await.is_empty());
+
+    std::fs::remove_dir_all(&dir).ok();
   }
 
   #[tokio::test]
@@ -460,12 +605,14 @@ mod tests {
     store.enqueue_outbound("user-1", &note_change("note-2", "queued", 2_000)).await;
     store.set_cursor("user-1", 42).await;
     store.save_session("user-1", "{}", 1_000).await;
+    store.upsert_reminder_schedule("user-1", &schedule("note-1", 5_000, "hash-a")).await;
     let device = store.device_id().await;
 
     store.clear_user_data("user-1").await;
 
     assert!(store.load_snapshot("user-1").await.notes.is_empty());
     assert!(store.peek_front_outbound("user-1").await.is_none());
+    assert!(store.load_reminder_schedules("user-1").await.is_empty());
     assert_eq!(store.cursor("user-1").await, 0);
     assert_eq!(store.device_id().await, device);
     assert_eq!(store.load_session().await.map(|(id, _)| id), Some("user-1".to_string()));

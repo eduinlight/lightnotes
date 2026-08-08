@@ -1,4 +1,4 @@
-use crate::components::{EmptyState, NoteEditorPanel, NoteEditorSkeleton};
+use crate::components::{DateTimeFields, EmptyState, NoteEditorPanel, NoteEditorSkeleton, ReminderPicker};
 use crate::state::{use_boot, use_notes};
 use dioxus::prelude::*;
 
@@ -15,7 +15,13 @@ pub fn NoteEditor(note_id: String) -> Element {
 
   match store.note(&note_id) {
     Some(note) => rsx! {
-        NoteEditorPanel { note }
+        NoteEditorPanel {
+            note: note.clone(),
+            extra_header: rsx! {
+                DateTimeFields { note: note.clone() }
+                ReminderPicker { note }
+            },
+        }
     },
     None => rsx! {
         EmptyState {}

@@ -1,4 +1,4 @@
-use crate::state::{date_math, i18n, now_ms, use_boot, use_diary_ui, use_notes, CalendarViewMode, DiaryUiState, Folder, Note, NotesStore, Tag};
+use crate::state::{date_math, i18n, local_now_ms, use_boot, use_diary_ui, use_notes, CalendarViewMode, DiaryUiState, Folder, Note, NotesStore, Tag};
 use crate::Route;
 use dioxus::prelude::*;
 use dioxus_i18n::t;
@@ -144,7 +144,7 @@ impl DiaryEntryListState {
     let tag = (self.diary_ui.filter_tag)();
     let view_mode = (self.diary_ui.view_mode)();
     let folders = self.store.folders();
-    let today_days = date_math::day_key(now_ms());
+    let today_days = date_math::day_key(local_now_ms());
 
     let mut notes: Vec<Note> = self
       .store
