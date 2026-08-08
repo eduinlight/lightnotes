@@ -21,7 +21,7 @@ pub struct Note {
   pub starred: bool,
   pub updated_at_ms: i64,
   pub order: i64,
-  #[serde(default = "now_ms")]
+  #[serde(default = "local_now_ms")]
   pub date_ms: i64,
   #[serde(default)]
   pub remind_before_hours: Option<i64>,
@@ -32,6 +32,10 @@ pub fn now_ms() -> i64 {
     .duration_since(web_time::UNIX_EPOCH)
     .map(|duration| duration.as_millis() as i64)
     .unwrap_or(0)
+}
+
+pub fn local_now_ms() -> i64 {
+  super::date_math::utc_ms_to_local_ms(now_ms())
 }
 
 pub fn format_relative_time(updated_at_ms: i64) -> String {
@@ -187,6 +191,17 @@ impl NotesStore {
 
   pub fn user_id(&self) -> String {
     (self.user_id)()
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  pub fn peek_user_id(&self) -> String {
+    self.user_id.peek().clone()
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  pub fn peek_notes(&self) -> Vec<Note> {
+    let user_id = self.peek_user_id();
+    self.notes.peek().iter().filter(|note| note.user_id == user_id).cloned().collect()
   }
 
   pub fn set_user(&mut self, user_id: String) {
@@ -408,7 +423,7 @@ impl NotesStore {
       _ => Vec::new(),
     };
 
-    self.insert_note(folder_id, tag_ids, now_ms())
+    self.insert_note(folder_id, tag_ids, local_now_ms())
   }
 
   pub fn create_diary_note(&mut self, date_ms: i64, folder_id: Option<String>, tag_ids: Vec<String>) -> String {

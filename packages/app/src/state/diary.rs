@@ -1,4 +1,4 @@
-use super::notes::now_ms;
+use super::notes::local_now_ms;
 use dioxus::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -22,7 +22,7 @@ impl DiaryUiState {
   pub fn seed() -> Self {
     Self {
       view_mode: Signal::new(CalendarViewMode::Month),
-      cursor_date_ms: Signal::new(now_ms()),
+      cursor_date_ms: Signal::new(local_now_ms()),
       calendar_open: Signal::new(false),
       filter_open: Signal::new(false),
       filter_folder: Signal::new(None),

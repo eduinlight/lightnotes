@@ -9,13 +9,19 @@ pub use session::use_persisted_session;
 
 mod notes;
 pub use notes::{
-  format_relative_time, now_ms, Folder, FolderIcon, Note, NoteFilter, NotesStore, SyncStatus, Tag, Theme, ACCENT_SWATCHES, REMIND_CHOICES,
+  format_relative_time, local_now_ms, Folder, FolderIcon, Note, NoteFilter, NotesStore, SyncStatus, Tag, Theme, ACCENT_SWATCHES, REMIND_CHOICES,
 };
 
 mod use_notes;
 pub use use_notes::use_notes;
 
 mod preferences;
+
+pub mod reminders;
+pub use reminders::use_reminders;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod scheduler;
 
 mod sync;
 pub use sync::{api_base_url, use_synced_notes};

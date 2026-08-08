@@ -204,6 +204,8 @@ reminder-short-hours = { $count }h before
 reminder-short-days = { $count }d before
 reminder-short-weeks = { $count }w before
 reminder-fires = Fires { $when }
+reminder-notification-untitled = Untitled note
+reminder-notification-body = Due { $when }
 
 time-am = am
 time-pm = pm

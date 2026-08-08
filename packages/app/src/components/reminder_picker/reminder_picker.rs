@@ -26,16 +26,6 @@ fn choice_label(hours: Option<i64>) -> String {
   }
 }
 
-fn format_absolute(ms: i64) -> String {
-  let (_, month, day, hour24, minute) = date_math::date_ms_to_ymdhm(ms);
-  let period = if hour24 < 12 { t!("time-am") } else { t!("time-pm") };
-  let hour12 = match hour24 % 12 {
-    0 => 12,
-    h => h,
-  };
-  format!("{day} {} \u{b7} {hour12}:{minute:02} {period}", i18n::month_short_name(month))
-}
-
 #[derive(PartialEq, Clone, Props)]
 pub struct ReminderPickerProps {
   pub note: Note,
@@ -93,7 +83,7 @@ pub fn ReminderPicker(props: ReminderPickerProps) -> Element {
               }
               if let Some(hours) = note.remind_before_hours {
                   div { class: "mt-1 border-t border-[var(--primary-color-6)] px-2 pt-2 text-[11.5px] text-[color-mix(in_srgb,var(--secondary-color)_55%,transparent)]",
-                      {t!("reminder-fires", when: format_absolute(note.date_ms - hours * date_math::MS_PER_HOUR))}
+                      {t!("reminder-fires", when: i18n::format_absolute(note.date_ms - hours * date_math::MS_PER_HOUR))}
                   }
               }
           }
