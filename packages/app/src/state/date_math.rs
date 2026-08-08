@@ -1,6 +1,26 @@
+use std::sync::atomic::{AtomicI64, Ordering};
+
 pub const MS_PER_DAY: i64 = 86_400_000;
 pub const MS_PER_HOUR: i64 = 3_600_000;
-const MS_PER_MINUTE: i64 = 60_000;
+pub const MS_PER_MINUTE: i64 = 60_000;
+
+static LOCAL_OFFSET_MS: AtomicI64 = AtomicI64::new(0);
+
+pub fn set_local_offset_ms(offset_ms: i64) {
+  LOCAL_OFFSET_MS.store(offset_ms, Ordering::Relaxed);
+}
+
+pub fn local_offset_ms() -> i64 {
+  LOCAL_OFFSET_MS.load(Ordering::Relaxed)
+}
+
+pub fn offset_ms_from_timezone_offset_minutes(minutes: i64) -> i64 {
+  -minutes * MS_PER_MINUTE
+}
+
+pub fn utc_ms_to_local_ms(utc_ms: i64) -> i64 {
+  utc_ms + local_offset_ms()
+}
 
 pub fn days_from_civil(y: i32, m: u32, d: u32) -> i64 {
   let y = y as i64 - if m <= 2 { 1 } else { 0 };
@@ -127,5 +147,22 @@ mod tests {
     let ms = date_and_time_strings_to_ms("2026-07-29", "09:05").unwrap();
     assert_eq!(date_ms_to_date_string(ms), "2026-07-29");
     assert_eq!(date_ms_to_time_string(ms), "09:05");
+  }
+
+  #[test]
+  fn timezone_offset_minutes_invert_to_signed_milliseconds() {
+    assert_eq!(offset_ms_from_timezone_offset_minutes(300), -5 * MS_PER_HOUR);
+    assert_eq!(offset_ms_from_timezone_offset_minutes(-60), MS_PER_HOUR);
+    assert_eq!(offset_ms_from_timezone_offset_minutes(0), 0);
+    assert_eq!(offset_ms_from_timezone_offset_minutes(-330), 5 * MS_PER_HOUR + 30 * MS_PER_MINUTE);
+  }
+
+  #[test]
+  fn utc_converts_to_the_matching_local_wall_clock() {
+    set_local_offset_ms(offset_ms_from_timezone_offset_minutes(300));
+    assert_eq!(local_offset_ms(), -5 * MS_PER_HOUR);
+
+    let utc_ms = ymdhm_to_date_ms(2026, 8, 8, 14, 0);
+    assert_eq!(date_ms_to_ymdhm(utc_ms_to_local_ms(utc_ms)), (2026, 8, 8, 9, 0));
   }
 }
